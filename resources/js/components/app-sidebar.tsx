@@ -1,10 +1,30 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
-    LayoutGrid, Users, Package, ShoppingCart, Receipt,
-    BarChart2, Settings, Store, Shield, Tag, Warehouse,
-    ListOrdered, Ticket, TrendingUp, Archive, UserCheck,
-    Server, CreditCard, Menu, Mail, Box, RotateCcw,
-    PackageOpen, BookOpen, FolderGit2,
+    LayoutGrid,
+    Users,
+    Package,
+    ShoppingCart,
+    Receipt,
+    BarChart2,
+    Settings,
+    Store,
+    Shield,
+    Tag,
+    Warehouse,
+    ListOrdered,
+    Ticket,
+    TrendingUp,
+    Archive,
+    UserCheck,
+    Server,
+    CreditCard,
+    Menu,
+    Mail,
+    Box,
+    RotateCcw,
+    PackageOpen,
+    BookOpen,
+    FolderGit2,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
@@ -26,10 +46,28 @@ import type { NavItem } from '@/types';
 const iconMap: Record<string, React.ElementType> = {
     LayoutDashboard: LayoutGrid,
     LayoutGrid,
-    Users, Package, ShoppingCart, Receipt, BarChart2, Settings,
-    Store, Shield, Tag, Warehouse, ListOrdered, Ticket, TrendingUp,
-    Archive, UserCheck, Server, CreditCard, Menu, Mail, Box,
-    RotateCcw, PackageOpen,
+    Users,
+    Package,
+    ShoppingCart,
+    Receipt,
+    BarChart2,
+    Settings,
+    Store,
+    Shield,
+    Tag,
+    Warehouse,
+    ListOrdered,
+    Ticket,
+    TrendingUp,
+    Archive,
+    UserCheck,
+    Server,
+    CreditCard,
+    Menu,
+    Mail,
+    Box,
+    RotateCcw,
+    PackageOpen,
     // Fallback
     default: LayoutGrid,
 };
@@ -38,25 +76,25 @@ const iconMap: Record<string, React.ElementType> = {
 // Tidak menggunakan Ziggy karena starter kit ini pakai Wayfinder
 function buildUrl(routeName: string, teamSlug: string): string {
     const routeMap: Record<string, string> = {
-        'dashboard':                `/${teamSlug}/dashboard`,
-        'users.index':              `/${teamSlug}/users`,
-        'invitations.index':        `/${teamSlug}/invitations`,
-        'roles.index':              `/${teamSlug}/roles`,
-        'permissions.index':        `/${teamSlug}/permissions`,
-        'menus.index':              `/${teamSlug}/menus`,
-        'products.index':           `/${teamSlug}/products`,
+        dashboard: `/${teamSlug}/dashboard`,
+        'users.index': `/${teamSlug}/users`,
+        'invitations.index': `/${teamSlug}/invitations`,
+        'roles.index': `/${teamSlug}/roles`,
+        'permissions.index': `/${teamSlug}/permissions`,
+        'menus.index': `/${teamSlug}/menus`,
+        'products.index': `/${teamSlug}/products`,
         'product-categories.index': `/${teamSlug}/product-categories`,
-        'product-stocks.index':     `/${teamSlug}/product-stocks`,
-        'pos.index':                `/${teamSlug}/pos`,
-        'transactions.index':       `/${teamSlug}/transactions`,
-        'transactions.refunds':     `/${teamSlug}/transactions/refunds`,
-        'transactions.returns':     `/${teamSlug}/transactions/returns`,
-        'vouchers.index':           `/${teamSlug}/vouchers`,
-        'reports.sales':            `/${teamSlug}/reports/sales`,
-        'reports.stock':            `/${teamSlug}/reports/stock`,
-        'reports.cashier':          `/${teamSlug}/reports/cashier`,
-        'settings.system':          `/${teamSlug}/settings/system`,
-        'settings.membership':      `/${teamSlug}/settings/membership`,
+        'product-stocks.index': `/${teamSlug}/product-stocks`,
+        'pos.index': `/${teamSlug}/pos`,
+        'transactions.index': `/${teamSlug}/transactions`,
+        'transactions.refunds': `/${teamSlug}/transactions/refunds`,
+        'transactions.returns': `/${teamSlug}/transactions/returns`,
+        'vouchers.index': `/${teamSlug}/vouchers`,
+        'reports.sales': `/${teamSlug}/reports/sales`,
+        'reports.stock': `/${teamSlug}/reports/stock`,
+        'reports.cashier': `/${teamSlug}/reports/cashier`,
+        'settings.system': `/${teamSlug}/settings/system`,
+        'settings.membership': `/${teamSlug}/settings/membership`,
     };
     return routeMap[routeName] ?? `/${teamSlug}/dashboard`;
 }
@@ -83,7 +121,7 @@ export function AppSidebar() {
     const dashboardUrl = teamSlug ? `/${teamSlug}/dashboard` : '/';
 
     // Convert server nav items ke format NavItem yang dipakai NavMain
-    const mainNavItems: NavItem[] = navItemsFromServer.map(item => {
+    const mainNavItems: NavItem[] = navItemsFromServer.map((item) => {
         const Icon = iconMap[item.icon] ?? iconMap.default;
         const href = item.route ? buildUrl(item.route, teamSlug) : '#';
 
@@ -92,12 +130,13 @@ export function AppSidebar() {
             href,
             icon: Icon,
             // Jika punya children, tambahkan sebagai items
-            items: item.children.length > 0
-                ? item.children.map(child => ({
-                    title: child.label,
-                    href: buildUrl(child.route, teamSlug),
-                }))
-                : undefined,
+            items:
+                item.children.length > 0
+                    ? item.children.map((child) => ({
+                          title: child.label,
+                          href: buildUrl(child.route, teamSlug),
+                      }))
+                    : undefined,
         };
     });
 

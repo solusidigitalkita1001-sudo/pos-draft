@@ -25,7 +25,8 @@ import {
     SheetTitle,
     SheetTrigger,
 } from '@/components/ui/sheet';
-import Sidebar from '@/components/ui/sidebar';
+// import Sidebar from '@/components/ui/sidebar';
+import MobileSidebar from '@/components/ui/mobile-sidebar';
 import {
     Tooltip,
     TooltipContent,
