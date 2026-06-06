@@ -1,11 +1,13 @@
 import { Link, usePage, router } from '@inertiajs/react';
-import { useState } from 'react';
+import { Slot } from 'radix-ui';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import {
     ShoppingCart, Store, User, LogOut, ChevronsUpDown, Check,
     ChevronDown, ChevronRight, LayoutDashboard, Users, Package,
-    Receipt, BarChart2, Settings,
+    Receipt, BarChart2, Settings, Menu,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────
 interface NavChild {
@@ -64,7 +66,7 @@ function buildUrl(routeName: string, teamSlug: string): string {
 }
 
 // ─── Icon Map ────────────────────────────────────────────
-const iconMap: Record<string, React.ElementType> = {
+const iconMap: Record<string, LucideIcon> = {
     LayoutDashboard, Users, Package, ShoppingCart, Receipt,
     BarChart2, Settings, Store, User,
     // aliases dari MenuSeeder
@@ -85,6 +87,182 @@ const iconMap: Record<string, React.ElementType> = {
     Mail: Users,
     UserList: Users,
 };
+
+// ─── Sidebar UI primitives ───────────────────────────────
+interface SidebarContextValue {
+    open: boolean;
+    setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+const SidebarContext = createContext<SidebarContextValue | undefined>(undefined);
+
+function useSidebarContext() {
+    const context = useContext(SidebarContext);
+    if (!context) {
+        throw new Error('useSidebar must be used within SidebarProvider');
+    }
+    return context;
+}
+
+export function SidebarProvider({
+    defaultOpen = true,
+    children,
+}: {
+    defaultOpen?: boolean;
+    children: ReactNode;
+}) {
+    const [open, setOpen] = useState(defaultOpen);
+
+    return (
+        <SidebarContext.Provider value={{ open, setOpen }}>
+            <div
+                className="sidebar-wrapper group flex min-h-screen"
+                data-collapsible={open ? undefined : 'icon'}
+            >
+                {children}
+            </div>
+        </SidebarContext.Provider>
+    );
+}
+
+export function useSidebar() {
+    const context = useSidebarContext();
+    return {
+        ...context,
+        state: context.open ? 'expanded' : 'collapsed',
+    };
+}
+
+export function SidebarTrigger({
+    className,
+    ...props
+}: React.ComponentProps<'button'>) {
+    const { open, setOpen } = useSidebar();
+
+    return (
+        <button
+            type="button"
+            className={cn(
+                'inline-flex h-9 w-9 items-center justify-center rounded-md text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                className,
+            )}
+            aria-expanded={open}
+            onClick={() => setOpen((value) => !value)}
+            {...props}
+        >
+            <Menu size={18} />
+        </button>
+    );
+}
+
+export function SidebarInset({
+    children,
+    className,
+    ...props
+}: React.ComponentProps<'main'>) {
+    return (
+        <main className={cn('flex min-h-screen', className)} {...props}>
+            {children}
+        </main>
+    );
+}
+
+export function SidebarGroup({
+    className,
+    ...props
+}: React.ComponentProps<'div'>) {
+    return <div data-slot="sidebar-group" className={cn(className)} {...props} />;
+}
+
+export function SidebarGroupContent({
+    className,
+    ...props
+}: React.ComponentProps<'div'>) {
+    return (
+        <div data-slot="sidebar-group-content" className={cn(className)} {...props} />
+    );
+}
+
+export function SidebarGroupLabel({
+    className,
+    ...props
+}: React.ComponentProps<'div'>) {
+    return (
+        <div
+            data-slot="sidebar-group-label"
+            className={cn('px-2 py-2 text-xs uppercase tracking-wide text-muted-foreground', className)}
+            {...props}
+        />
+    );
+}
+
+export function SidebarHeader({
+    className,
+    ...props
+}: React.ComponentProps<'div'>) {
+    return <div data-slot="sidebar-header" className={cn(className)} {...props} />;
+}
+
+export function SidebarContent({
+    className,
+    ...props
+}: React.ComponentProps<'div'>) {
+    return <div data-slot="sidebar-content" className={cn(className)} {...props} />;
+}
+
+export function SidebarFooter({
+    className,
+    ...props
+}: React.ComponentProps<'div'>) {
+    return <div data-slot="sidebar-footer" className={cn(className)} {...props} />;
+}
+
+export function SidebarMenu({
+    className,
+    ...props
+}: React.ComponentProps<'div'>) {
+    return <div data-slot="sidebar-menu" className={cn(className)} {...props} />;
+}
+
+export function SidebarMenuItem({
+    className,
+    ...props
+}: React.ComponentProps<'div'>) {
+    return <div data-slot="sidebar-menu-item" className={cn(className)} {...props} />;
+}
+
+export function SidebarMenuButton({
+    className,
+    asChild = false,
+    isActive,
+    size = 'default',
+    tooltip,
+    ...props
+}: React.ComponentProps<'button'> & {
+    asChild?: boolean;
+    isActive?: boolean;
+    size?: 'default' | 'lg';
+    tooltip?: { children: string };
+}) {
+    const Component = asChild ? Slot.Root : 'button';
+
+    return (
+        <Component
+            data-slot="sidebar-menu-button"
+            data-state={isActive ? 'open' : undefined}
+            data-size={size}
+            className={cn(
+                'inline-flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                isActive
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                size === 'lg' ? 'h-11' : 'h-9',
+                className,
+            )}
+            {...props}
+        />
+    );
+}
 
 // ─── NavLink ─────────────────────────────────────────────
 function NavLink({
@@ -367,11 +545,29 @@ export default function Sidebar({
     className,
     style,
     onNavigate,
+    collapsible,
+    variant,
+    children,
 }: {
     className?: string;
     style?: React.CSSProperties;
     onNavigate?: () => void;
+    collapsible?: 'icon';
+    variant?: 'inset';
+    children?: ReactNode;
 }) {
+    if (children) {
+        return (
+            <aside
+                className={cn('flex min-h-full flex-col overflow-hidden', className)}
+                data-collapsible={collapsible}
+                data-variant={variant}
+                style={style}
+            >
+                {children}
+            </aside>
+        );
+    }
     const page = usePage();
     const { auth, navigation } = page.props as any;
     const navItems: NavItem[] = navigation ?? [];

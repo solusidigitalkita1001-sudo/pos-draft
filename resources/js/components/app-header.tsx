@@ -25,8 +25,7 @@ import {
     SheetTitle,
     SheetTrigger,
 } from '@/components/ui/sheet';
-// import Sidebar from '@/components/ui/sidebar';
-import MobileSidebar from '@/components/ui/mobile-sidebar';
+import Sidebar from '@/components/ui/sidebar';
 import {
     Tooltip,
     TooltipContent,
@@ -39,6 +38,8 @@ import { useInitials } from '@/hooks/use-initials';
 import { cn, toUrl } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { BreadcrumbItem, NavItem } from '@/types';
+import type { Auth } from '@/types/auth';
+import type { Team } from '@/types/teams';
 
 type Props = {
     breadcrumbs?: BreadcrumbItem[];
@@ -61,12 +62,13 @@ const activeItemStyles =
     'text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100';
 
 export function AppHeader({ breadcrumbs = [] }: Props) {
-    const page = usePage();
+    const page = usePage<{ auth: Auth; currentTeam: Team | null }>();
     const { auth, currentTeam } = page.props;
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const getInitials = useInitials();
     const { isCurrentUrl, whenCurrentUrl } = useCurrentUrl();
     const dashboardUrl = currentTeam ? dashboard(currentTeam.slug) : '/';
+    // const dashboardUrl = currentTeam && 'slug' in currentTeam ? dashboard(currentTeam.slug) : '/';
 
     const mainNavItems: NavItem[] = [
         {

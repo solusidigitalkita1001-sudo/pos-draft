@@ -1,4 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
+import type { LucideIcon } from 'lucide-react';
 import {
     LayoutGrid,
     Users,
@@ -31,8 +32,7 @@ import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import { TeamSwitcher } from '@/components/team-switcher';
-import {
-    Sidebar,
+import Sidebar, {
     SidebarContent,
     SidebarFooter,
     SidebarHeader,
@@ -43,7 +43,7 @@ import {
 import type { NavItem } from '@/types';
 
 // Map icon name (string dari backend) ke Lucide component
-const iconMap: Record<string, React.ElementType> = {
+const iconMap: Record<string, LucideIcon> = {
     LayoutDashboard: LayoutGrid,
     LayoutGrid,
     Users,
