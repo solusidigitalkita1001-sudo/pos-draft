@@ -12,6 +12,7 @@ use App\Models\Transaction;
 use App\Models\TransactionItem;
 use App\Models\User;
 use App\Models\Voucher;
+use App\Support\DocumentNumberGenerator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -90,7 +91,7 @@ class CreatePosTransactionAction
                 'team_id' => $team->id,
                 'user_id' => $cashier->id,
                 'voucher_id' => $voucher?->id,
-                'invoice_number' => $this->generateInvoiceNumber($team),
+                'invoice_number' => DocumentNumberGenerator::generate('POS', 'transactions', 'invoice_number', $team->id),
                 'customer_name' => $data['customer_name'] ?? null,
                 'status' => Transaction::STATUS_COMPLETED,
                 'payment_status' => Transaction::PAYMENT_STATUS_PAID,
@@ -402,13 +403,5 @@ class CreatePosTransactionAction
         return $voucher;
     }
 
-    private function generateInvoiceNumber(Team $team): string
-    {
-        $prefix = 'POS-'.now()->format('Ymd').'-';
-        $count = Transaction::where('team_id', $team->id)
-            ->where('invoice_number', 'like', $prefix.'%')
-            ->count() + 1;
 
-        return $prefix.str_pad((string) $count, 4, '0', STR_PAD_LEFT);
-    }
 }

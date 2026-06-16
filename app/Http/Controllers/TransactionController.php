@@ -6,6 +6,7 @@ use App\Models\Team;
 use App\Models\Transaction;
 use App\Models\TransactionAudit;
 use App\Notifications\TransactionNotification;
+use App\Support\DocumentNumberGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Notification;
@@ -102,7 +103,7 @@ class TransactionController extends Controller
 
         $transaction = $team->transactions()->create([
             'user_id' => $user->id,
-            'invoice_number' => $this->generateInvoiceNumber($team),
+            'invoice_number' => DocumentNumberGenerator::generate('TRX', 'transactions', 'invoice_number', $team->id),
             'customer_name' => $validated['customer_name'],
             'status' => $status,
             'payment_status' => $paymentStatus,
@@ -366,13 +367,4 @@ class TransactionController extends Controller
         Notification::send($members, new TransactionNotification($transaction, $action));
     }
 
-    private function generateInvoiceNumber(Team $team): string
-    {
-        $prefix = 'TRX-'.now()->format('Ymd').'-';
-        $count = Transaction::where('team_id', $team->id)
-            ->where('invoice_number', 'like', $prefix.'%')
-            ->count() + 1;
-
-        return $prefix.str_pad((string) $count, 4, '0', STR_PAD_LEFT);
-    }
 }

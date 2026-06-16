@@ -6,6 +6,7 @@ use App\Models\Team;
 use App\Models\Transaction;
 use App\Models\TransactionRefund;
 use App\Models\User;
+use App\Support\DocumentNumberGenerator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -43,7 +44,7 @@ class CreateTransactionRefundAction
                 'team_id' => $team->id,
                 'transaction_id' => $transaction->id,
                 'user_id' => $user->id,
-                'refund_number' => $this->generateRefundNumber($team),
+                'refund_number' => DocumentNumberGenerator::generate('RFN', 'transaction_refunds', 'refund_number', $team->id),
                 'amount' => $amount,
                 'method' => $data['method'],
                 'status' => $status,
@@ -53,13 +54,4 @@ class CreateTransactionRefundAction
         });
     }
 
-    private function generateRefundNumber(Team $team): string
-    {
-        $prefix = 'RFN-'.now()->format('Ymd').'-';
-        $count = TransactionRefund::where('team_id', $team->id)
-            ->where('refund_number', 'like', $prefix.'%')
-            ->count() + 1;
-
-        return $prefix.str_pad((string) $count, 4, '0', STR_PAD_LEFT);
-    }
 }

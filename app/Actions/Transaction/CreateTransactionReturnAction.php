@@ -8,6 +8,7 @@ use App\Models\Team;
 use App\Models\TransactionItem;
 use App\Models\TransactionReturn;
 use App\Models\User;
+use App\Support\DocumentNumberGenerator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -56,7 +57,7 @@ class CreateTransactionReturnAction
                 'transaction_item_id' => $item->id,
                 'product_id' => $item->product_id,
                 'user_id' => $user->id,
-                'return_number' => $this->generateReturnNumber($team),
+                'return_number' => DocumentNumberGenerator::generate('RTN', 'transaction_returns', 'return_number', $team->id),
                 'quantity' => $quantity,
                 'refund_amount' => $refundAmount,
                 'restock' => (bool) ($data['restock'] ?? true),
@@ -92,13 +93,4 @@ class CreateTransactionReturnAction
         return $unitNet * $quantity;
     }
 
-    private function generateReturnNumber(Team $team): string
-    {
-        $prefix = 'RTN-'.now()->format('Ymd').'-';
-        $count = TransactionReturn::where('team_id', $team->id)
-            ->where('return_number', 'like', $prefix.'%')
-            ->count() + 1;
-
-        return $prefix.str_pad((string) $count, 4, '0', STR_PAD_LEFT);
-    }
 }
