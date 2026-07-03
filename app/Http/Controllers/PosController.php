@@ -65,16 +65,20 @@ class PosController extends Controller
             ->with([
                 'cashier:id,name',
                 'items:id,transaction_id,product_name,product_sku,unit_price,quantity,discount_total,line_total',
+                'voucher:id,code,name,type,value',
             ])
             ->latest()
             ->limit(8)
             ->get([
                 'id',
+                'voucher_id',
                 'invoice_number',
                 'customer_name',
                 'status',
                 'payment_status',
                 'payment_method',
+                'subtotal',
+                'discount_total',
                 'grand_total',
                 'paid_amount',
                 'change_amount',
@@ -82,9 +86,27 @@ class PosController extends Controller
                 'user_id',
             ]);
 
+        $vouchers = $team->vouchers()
+            ->where('is_active', true)
+            ->where(function ($query) {
+                $query->whereNull('starts_at')
+                    ->orWhere('starts_at', '<=', now());
+            })
+            ->where(function ($query) {
+                $query->whereNull('expires_at')
+                    ->orWhere('expires_at', '>=', now());
+            })
+            ->where(function ($query) {
+                $query->whereNull('usage_limit')
+                    ->orWhereColumn('used_count', '<', 'usage_limit');
+            })
+            ->orderBy('code')
+            ->get(['id', 'code', 'name', 'type', 'value', 'min_purchase', 'max_discount']);
+
         return Inertia::render('pos/index', [
             'products' => $this->formatSaleItems($products, $packages, $promotions)->take(40)->values(),
             'recentTransactions' => $recentTransactions,
+            'vouchers' => $vouchers,
             'teamSlug' => $team->slug,
             'paymentMethods' => [
                 ['value' => 'cash', 'label' => 'Tunai'],

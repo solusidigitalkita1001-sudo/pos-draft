@@ -35,6 +35,19 @@ export interface AppliedVoucher {
     discount_total: number;
 }
 
+export interface VoucherSummary {
+    id: number;
+    code: string;
+    name: string;
+    type: 'fixed' | 'percent';
+    value: string;
+}
+
+export interface AvailableVoucher extends VoucherSummary {
+    min_purchase: string;
+    max_discount: string | null;
+}
+
 // ─── Payment ──────────────────────────────────────────────────────────────────
 
 export interface PaymentMethod {
@@ -61,11 +74,14 @@ export interface RecentTransaction {
     status: 'pending' | 'completed' | 'void';
     payment_status: 'unpaid' | 'partial' | 'paid';
     payment_method: string | null;
+    subtotal: string;
+    discount_total: string;
     grand_total: string;
     paid_amount: string;
     change_amount: string;
     created_at: string;
     cashier?: { id: number; name: string } | null;
+    voucher?: VoucherSummary | null;
     items: RecentTransactionItem[];
 }
 

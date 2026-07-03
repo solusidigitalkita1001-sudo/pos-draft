@@ -1,14 +1,17 @@
-import React, { useState } from 'react';
-import { Banknote, ChevronDown } from 'lucide-react';
 import { router } from '@inertiajs/react';
+import { Banknote, ChevronDown } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
 import type { PaymentMethod, RecentTransaction } from '@/types/pos';
 import {
     formatCurrency,
     formatDate,
+    formatNumberInput,
     inputStyle,
+    parseNumberInput,
     paymentStatusLabel,
     PosBadge,
     remainingPayment,
+    SearchableSelect,
     SummaryRow,
 } from '../pos-utils';
 
@@ -29,6 +32,10 @@ export function RecentTransactions({ transactions, paymentMethods, defaultPaymen
     const [processingId, setProcessingId]   = useState<number | null>(null);
     const [forms, setForms]                 = useState<Record<number, SettlementForm>>({});
     const [errors, setErrors]               = useState<Record<string, string>>({});
+    const paymentOptions = useMemo(
+        () => paymentMethods.map((method) => ({ value: method.value, label: method.label })),
+        [paymentMethods],
+    );
 
     function getForm(tx: RecentTransaction): SettlementForm {
         return forms[tx.id] ?? {
@@ -45,12 +52,13 @@ export function RecentTransactions({ transactions, paymentMethods, defaultPaymen
         setErrors((prev) => {
             const next = { ...prev };
             delete next.paid_amount;
+
             return next;
         });
     }
 
     function settlePaidAmount(tx: RecentTransaction): number {
-        return parseFloat(getForm(tx).paid_amount || '0');
+        return parseNumberInput(getForm(tx).paid_amount);
     }
 
     function settleChangeAmount(tx: RecentTransaction): number {
@@ -60,27 +68,50 @@ export function RecentTransactions({ transactions, paymentMethods, defaultPaymen
     function validate(tx: RecentTransaction): string | null {
         const form  = getForm(tx);
         const paid  = settlePaidAmount(tx);
-        if (!form.payment_method)              return 'Metode pembayaran wajib dipilih.';
-        if (!form.paid_amount.trim())          return 'Jumlah bayar wajib diisi.';
-        if (!Number.isFinite(paid) || paid <= 0) return 'Jumlah bayar wajib lebih dari 0.';
-        if (paid < remainingPayment(tx))       return 'Nominal pembayaran kurang dari sisa tagihan.';
+
+        if (!form.payment_method)              {
+            return 'Metode pembayaran wajib dipilih.';
+        }
+
+        if (!form.paid_amount.trim())          {
+            return 'Jumlah bayar wajib diisi.';
+        }
+
+        if (!Number.isFinite(paid) || paid <= 0) {
+            return 'Jumlah bayar wajib lebih dari 0.';
+        }
+
+        if (paid < remainingPayment(tx))       {
+            return 'Nominal pembayaran kurang dari sisa tagihan.';
+        }
+
         return null;
     }
 
     function settle(tx: RecentTransaction) {
         const err = validate(tx);
-        if (err) { setErrors({ paid_amount: err }); return; }
+
+        if (err) {
+            setErrors({ paid_amount: err });
+
+            return;
+        }
 
         const form = getForm(tx);
         setProcessingId(tx.id);
 
         router.post(
             `/${teamSlug}/pos/transaction/${tx.id}/payment`,
-            { payment_method: form.payment_method, paid_amount: form.paid_amount },
+            { payment_method: form.payment_method, paid_amount: String(parseNumberInput(form.paid_amount)) },
             {
                 preserveScroll: true,
                 onError:   (e)  => setErrors(e),
-                onSuccess: ()   => setForms((prev) => { const n = { ...prev }; delete n[tx.id]; return n; }),
+                onSuccess: ()   => setForms((prev) => {
+                    const n = { ...prev };
+                    delete n[tx.id];
+
+                    return n;
+                }),
                 onFinish:  ()   => setProcessingId(null),
             },
         );
@@ -104,6 +135,8 @@ export function RecentTransactions({ transactions, paymentMethods, defaultPaymen
                         ) : (
                             transactions.map((tx) => {
                                 const isExpanded = expandedId === tx.id;
+                                const discountTotal = parseFloat(tx.discount_total || '0');
+                                const voucherLabel = tx.voucher?.code ? `Voucher ${tx.voucher.code}` : 'Voucher';
 
                                 return (
                                     <React.Fragment key={tx.id}>
@@ -130,6 +163,11 @@ export function RecentTransactions({ transactions, paymentMethods, defaultPaymen
                                                 <div style={{ color: 'var(--muted-foreground)', fontSize: '12px', marginLeft: '23px' }}>
                                                     {formatDate(tx.created_at)}
                                                 </div>
+                                                {discountTotal > 0 && (
+                                                    <div style={{ color: 'hsl(142 70% 32%)', fontSize: '12px', fontWeight: 700, marginLeft: '23px', marginTop: '3px' }}>
+                                                        {voucherLabel}: -{formatCurrency(discountTotal)}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td style={{ padding: '12px 16px' }}>
                                                 {tx.customer_name ?? 'Umum'}
@@ -187,25 +225,30 @@ export function RecentTransactions({ transactions, paymentMethods, defaultPaymen
 
                                                         {/* Payment summary + settlement form */}
                                                         <div style={{ borderTop: '1px solid var(--border)', paddingTop: '10px', display: 'grid', gap: '6px', maxWidth: '280px', marginLeft: 'auto' }}>
+                                                            <SummaryRow label="Subtotal" value={formatCurrency(tx.subtotal)} />
+                                                            {discountTotal > 0 && (
+                                                                <SummaryRow
+                                                                    label={voucherLabel}
+                                                                    value={`-${formatCurrency(discountTotal)}`}
+                                                                />
+                                                            )}
                                                             <SummaryRow label="Total" value={formatCurrency(tx.grand_total)} strong />
                                                             <SummaryRow label="Bayar" value={formatCurrency(tx.paid_amount)} />
 
                                                             {tx.payment_status !== 'paid' && (
                                                                 <div style={{ display: 'grid', gap: '8px', marginTop: '4px' }}>
-                                                                    <select
+                                                                    <SearchableSelect
                                                                         value={getForm(tx).payment_method}
-                                                                        onChange={(e) => updateForm(tx.id, { payment_method: e.target.value })}
-                                                                        style={{ ...inputStyle, minHeight: '34px', fontSize: '12px' }}
-                                                                    >
-                                                                        {paymentMethods.map((m) => (
-                                                                            <option key={m.value} value={m.value}>{m.label}</option>
-                                                                        ))}
-                                                                    </select>
+                                                                        options={paymentOptions}
+                                                                        placeholder="Pilih metode pembayaran"
+                                                                        searchPlaceholder="Cari metode pembayaran..."
+                                                                        onChange={(value) => updateForm(tx.id, { payment_method: value })}
+                                                                    />
                                                                     <input
-                                                                        type="number"
-                                                                        min={1}
+                                                                        type="text"
+                                                                        inputMode="numeric"
                                                                         value={getForm(tx).paid_amount}
-                                                                        onChange={(e) => updateForm(tx.id, { paid_amount: e.target.value })}
+                                                                        onChange={(e) => updateForm(tx.id, { paid_amount: formatNumberInput(e.target.value) })}
                                                                         placeholder="Jumlah bayar pelunasan"
                                                                         style={{ ...inputStyle, minHeight: '34px', fontSize: '12px' }}
                                                                     />

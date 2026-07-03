@@ -1,22 +1,24 @@
 import { Head, router } from '@inertiajs/react';
 import { Receipt } from 'lucide-react';
-import { useState } from 'react';
-import type { PaymentMethod, PosItem, RecentTransaction } from '@/types/pos';
+import { useEffect, useMemo, useState } from 'react';
 import { useCart } from '@/hooks/use-cart';
 import { useProductSearch } from '@/hooks/use-product-search';
+import type { AppliedVoucher, AvailableVoucher, PaymentMethod, PosItem, RecentTransaction } from '@/types/pos';
 import { CartPanel } from './components/cart-panel';
 import { ProductGrid } from './components/product-grid';
 import { RecentTransactions } from './components/recent-transactions';
+import { parseNumberInput } from './pos-utils';
 
 interface Props {
     products: PosItem[];
     recentTransactions: RecentTransaction[];
+    vouchers: AvailableVoucher[];
     teamSlug: string;
     paymentMethods: PaymentMethod[];
     canApplyVoucher: boolean;
 }
 
-export default function PosIndex({ products, recentTransactions, teamSlug, paymentMethods, canApplyVoucher }: Props) {
+export default function PosIndex({ products, recentTransactions, vouchers, teamSlug, paymentMethods, canApplyVoucher }: Props) {
     const defaultPaymentMethod = paymentMethods[0]?.value ?? 'cash';
 
     // ── Hooks ──────────────────────────────────────────────────────────────────
@@ -31,15 +33,101 @@ export default function PosIndex({ products, recentTransactions, teamSlug, payme
     const [note,           setNote]            = useState('');
     const [processing,     setProcessing]      = useState(false);
     const [errors,         setErrors]          = useState<Record<string, string>>({});
+    const [appliedVoucher, setAppliedVoucher]  = useState<AppliedVoucher | null>(null);
+    const [voucherMessage, setVoucherMessage]  = useState<string | null>(null);
+    const [voucherChecking, setVoucherChecking] = useState(false);
+
+    const activeVoucher = voucherCode.trim() !== ''
+        && subtotal > 0
+        && cart.length > 0
+        && appliedVoucher?.code === voucherCode.trim()
+        ? appliedVoucher
+        : null;
+    const activeVoucherMessage = voucherCode.trim() !== '' && !activeVoucher ? voucherMessage : null;
+    const discountTotal = activeVoucher?.discount_total ?? 0;
+    const grandTotal = useMemo(() => Math.max(subtotal - discountTotal, 0), [discountTotal, subtotal]);
+
+    useEffect(() => {
+        if (!canApplyVoucher) {
+            return;
+        }
+
+        const code = voucherCode.trim();
+
+        if (!code || subtotal <= 0 || cart.length === 0) {
+            return;
+        }
+
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => {
+            setVoucherChecking(true);
+
+            fetch(`/${teamSlug}/pos/voucher/validate`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    ...csrfHeaders(),
+                },
+                body: JSON.stringify({ voucher_code: code, subtotal }),
+                signal: controller.signal,
+            })
+                .then(async (response) => {
+                    const data = (await response.json()) as ValidateVoucherResponse;
+
+                    if (!response.ok || !data.valid) {
+                        throw new Error(data.message ?? 'Voucher tidak valid atau tidak memenuhi syarat transaksi.');
+                    }
+
+                    setAppliedVoucher({
+                        ...data.voucher,
+                        discount_total: Number(data.discount_total ?? 0),
+                    });
+                    setVoucherMessage(data.message ?? null);
+                })
+                .catch((error: unknown) => {
+                    if (error instanceof DOMException && error.name === 'AbortError') {
+                        return;
+                    }
+
+                    setAppliedVoucher(null);
+                    setVoucherMessage(error instanceof Error ? error.message : 'Voucher tidak valid.');
+                })
+                .finally(() => setVoucherChecking(false));
+        }, 320);
+
+        return () => {
+            window.clearTimeout(timeout);
+            controller.abort();
+        };
+    }, [canApplyVoucher, cart.length, subtotal, teamSlug, voucherCode]);
 
     // ── Validation ────────────────────────────────────────────────────────────
     function validateCheckout(): string | null {
-        const paid = parseFloat(paidAmount || '0');
-        if (cart.length === 0)                       return 'Keranjang transaksi masih kosong.';
-        if (!paymentMethod)                          return 'Metode pembayaran wajib dipilih.';
-        if (!paidAmount.trim())                      return 'Jumlah bayar wajib diisi.';
-        if (!Number.isFinite(paid) || paid <= 0)     return 'Jumlah bayar wajib lebih dari 0.';
-        if (paid < subtotal)                         return 'Nominal pembayaran kurang dari total transaksi.';
+        const paid = parseNumberInput(paidAmount);
+
+        if (cart.length === 0) {
+            return 'Keranjang transaksi masih kosong.';
+        }
+
+        if (!paymentMethod) {
+            return 'Metode pembayaran wajib dipilih.';
+        }
+
+        if (!paidAmount.trim()) {
+            return 'Jumlah bayar wajib diisi.';
+        }
+
+        if (!Number.isFinite(paid) || paid <= 0) {
+            return 'Jumlah bayar wajib lebih dari 0.';
+        }
+
+        if (paid < grandTotal) {
+            return 'Nominal pembayaran kurang dari total transaksi.';
+        }
+
         return null;
     }
 
@@ -47,7 +135,12 @@ export default function PosIndex({ products, recentTransactions, teamSlug, payme
     function submitTransaction() {
         setErrors({});
         const error = validateCheckout();
-        if (error) { setErrors({ paid_amount: error }); return; }
+
+        if (error) {
+            setErrors({ paid_amount: error });
+
+            return;
+        }
 
         setProcessing(true);
 
@@ -57,7 +150,7 @@ export default function PosIndex({ products, recentTransactions, teamSlug, payme
                 customer_name:  customerName  || null,
                 voucher_code:   voucherCode   || null,
                 payment_method: paymentMethod,
-                paid_amount:    paidAmount    || '0',
+                paid_amount:    String(parseNumberInput(paidAmount)),
                 note:           note          || null,
                 items: cart.map((item) => ({
                     item_type: item.product.item_type,
@@ -71,6 +164,8 @@ export default function PosIndex({ products, recentTransactions, teamSlug, payme
                     clearCart();
                     setCustomerName('');
                     setVoucherCode('');
+                    setAppliedVoucher(null);
+                    setVoucherMessage(null);
                     setPaidAmount('');
                     setNote('');
                 },
@@ -132,7 +227,11 @@ export default function PosIndex({ products, recentTransactions, teamSlug, payme
                         cart={cart}
                         subtotal={subtotal}
                         paymentMethods={paymentMethods}
+                        vouchers={vouchers}
                         canApplyVoucher={canApplyVoucher}
+                        appliedVoucher={activeVoucher}
+                        voucherMessage={activeVoucherMessage}
+                        voucherChecking={voucherChecking}
                         customerName={customerName}
                         voucherCode={voucherCode}
                         paymentMethod={paymentMethod}
@@ -144,10 +243,18 @@ export default function PosIndex({ products, recentTransactions, teamSlug, payme
                         onRemoveItem={removeFromCart}
                         onClearCart={clearCart}
                         onSetCustomerName={setCustomerName}
-                        onSetVoucherCode={setVoucherCode}
+                        onSetVoucherCode={(value) => {
+                            setVoucherCode(value);
+                            setVoucherMessage(null);
+                        }}
                         onSetPaymentMethod={setPaymentMethod}
                         onSetPaidAmount={setPaidAmount}
-                        onClearPaidAmountError={() => setErrors((e) => { const n = { ...e }; delete n.paid_amount; return n; })}
+                        onClearPaidAmountError={() => setErrors((e) => {
+                            const n = { ...e };
+                            delete n.paid_amount;
+
+                            return n;
+                        })}
                         onSetNote={setNote}
                         onSubmit={submitTransaction}
                     />
@@ -155,4 +262,20 @@ export default function PosIndex({ products, recentTransactions, teamSlug, payme
             </div>
         </>
     );
+}
+
+interface ValidateVoucherResponse {
+    valid: boolean;
+    voucher: Omit<AppliedVoucher, 'discount_total'>;
+    discount_total: number | string;
+    message?: string;
+}
+
+function csrfHeaders(): Record<string, string> {
+    const token = document.cookie
+        .split('; ')
+        .find((row) => row.startsWith('XSRF-TOKEN='))
+        ?.split('=')[1];
+
+    return token ? { 'X-XSRF-TOKEN': decodeURIComponent(token) } : {};
 }

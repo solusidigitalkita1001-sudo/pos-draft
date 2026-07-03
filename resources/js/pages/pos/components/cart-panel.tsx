@@ -1,18 +1,27 @@
 import { Banknote, Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react';
-import type { CartItem, PaymentMethod, PosItem } from '@/types/pos';
+import { useMemo } from 'react';
+import type { AppliedVoucher, AvailableVoucher, CartItem, PaymentMethod, PosItem } from '@/types/pos';
 import {
+    formatNumberInput,
     formatCurrency,
     inputStyle,
     itemTypeLabel,
+    parseNumberInput,
     PosBadge,
+    SearchableSelect,
     SummaryRow,
 } from '../pos-utils';
+import type { SearchableSelectOption } from '../pos-utils';
 
 interface Props {
     cart: CartItem[];
     subtotal: number;
     paymentMethods: PaymentMethod[];
+    vouchers: AvailableVoucher[];
     canApplyVoucher: boolean;
+    appliedVoucher: AppliedVoucher | null;
+    voucherMessage: string | null;
+    voucherChecking: boolean;
 
     // Form state
     customerName: string;
@@ -40,7 +49,11 @@ export function CartPanel({
     cart,
     subtotal,
     paymentMethods,
+    vouchers,
     canApplyVoucher,
+    appliedVoucher,
+    voucherMessage,
+    voucherChecking,
     customerName,
     voucherCode,
     paymentMethod,
@@ -59,9 +72,25 @@ export function CartPanel({
     onSetNote,
     onSubmit,
 }: Props) {
-    const paid = parseFloat(paidAmount || '0');
-    const grandTotal = subtotal;
+    const paid = parseNumberInput(paidAmount);
+    const discountTotal = appliedVoucher?.discount_total ?? 0;
+    const grandTotal = Math.max(subtotal - discountTotal, 0);
     const changeAmount = Math.max(paid - grandTotal, 0);
+    const paymentOptions = useMemo<SearchableSelectOption[]>(
+        () => paymentMethods.map((method) => ({ value: method.value, label: method.label })),
+        [paymentMethods],
+    );
+    const voucherOptions = useMemo<SearchableSelectOption[]>(
+        () => [
+            { value: '', label: 'Tanpa voucher' },
+            ...vouchers.map((voucher) => ({
+                value: voucher.code,
+                label: `${voucher.code} - ${voucher.name}`,
+                description: voucherDescription(voucher),
+            })),
+        ],
+        [vouchers],
+    );
 
     return (
         <div
@@ -141,30 +170,50 @@ export function CartPanel({
                     />
 
                     {canApplyVoucher && (
-                        <input
-                            value={voucherCode}
-                            onChange={(e) => onSetVoucherCode(e.target.value.toUpperCase())}
-                            placeholder="Kode voucher (opsional)"
-                            style={inputStyle}
-                        />
+                        <div style={{ display: 'grid', gap: '6px' }}>
+                            <SearchableSelect
+                                value={voucherCode}
+                                options={voucherOptions}
+                                placeholder="Kode voucher (opsional)"
+                                searchPlaceholder="Cari kode atau nama voucher..."
+                                emptyText="Voucher tidak ditemukan."
+                                onChange={onSetVoucherCode}
+                            />
+
+                            {voucherChecking && (
+                                <div style={{ color: 'var(--muted-foreground)', fontSize: '12px' }}>
+                                    Mengecek voucher...
+                                </div>
+                            )}
+
+                            {!voucherChecking && appliedVoucher && (
+                                <div style={{ color: 'hsl(142 70% 32%)', fontSize: '12px', fontWeight: 700 }}>
+                                    Voucher {appliedVoucher.code}: -{formatCurrency(appliedVoucher.discount_total)}
+                                </div>
+                            )}
+
+                            {!voucherChecking && voucherMessage && !appliedVoucher && (
+                                <div style={{ color: 'hsl(0 72% 40%)', fontSize: '12px' }}>
+                                    {voucherMessage}
+                                </div>
+                            )}
+                        </div>
                     )}
 
-                    <select
+                    <SearchableSelect
                         value={paymentMethod}
-                        onChange={(e) => onSetPaymentMethod(e.target.value)}
-                        style={inputStyle}
-                    >
-                        {paymentMethods.map((m) => (
-                            <option key={m.value} value={m.value}>{m.label}</option>
-                        ))}
-                    </select>
+                        options={paymentOptions}
+                        placeholder="Pilih metode pembayaran"
+                        searchPlaceholder="Cari metode pembayaran..."
+                        onChange={onSetPaymentMethod}
+                    />
 
                     <input
-                        type="number"
-                        min={1}
+                        type="text"
+                        inputMode="numeric"
                         value={paidAmount}
                         onChange={(e) => {
-                            onSetPaidAmount(e.target.value);
+                            onSetPaidAmount(formatNumberInput(e.target.value));
                             onClearPaidAmountError();
                         }}
                         placeholder="Jumlah bayar"
@@ -206,6 +255,12 @@ export function CartPanel({
                     }}
                 >
                     <SummaryRow label="Subtotal"  value={formatCurrency(subtotal)} />
+                    {discountTotal > 0 && (
+                        <SummaryRow
+                            label={`Voucher ${appliedVoucher?.code ?? ''}`.trim()}
+                            value={`-${formatCurrency(discountTotal)}`}
+                        />
+                    )}
                     <SummaryRow label="Total"     value={formatCurrency(grandTotal)} strong />
                     <SummaryRow label="Bayar"     value={formatCurrency(paid)} />
                     <SummaryRow label="Kembalian" value={formatCurrency(changeAmount)} strong />
@@ -325,4 +380,18 @@ function QtyButton({ onClick, children }: { onClick: () => void; children: React
             {children}
         </button>
     );
+}
+
+function voucherDescription(voucher: AvailableVoucher): string {
+    const discount = voucher.type === 'percent'
+        ? `${Number(voucher.value)}%`
+        : formatCurrency(voucher.value);
+    const minPurchase = parseFloat(voucher.min_purchase || '0');
+    const maxDiscount = voucher.max_discount ? parseFloat(voucher.max_discount) : 0;
+
+    return [
+        `Diskon ${discount}`,
+        minPurchase > 0 ? `min. ${formatCurrency(minPurchase)}` : null,
+        maxDiscount > 0 ? `maks. ${formatCurrency(maxDiscount)}` : null,
+    ].filter(Boolean).join(' | ');
 }
