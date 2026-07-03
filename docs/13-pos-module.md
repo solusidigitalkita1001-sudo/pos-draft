@@ -4,12 +4,20 @@
 
 Search Product
 ↓
-Add Cart
+Add To Cart
 ↓
 Apply Voucher
 ↓
 Payment
 ↓
-Transaction Created
+Create Transaction
 ↓
-Stock Reduced
+Reduce Stock
+
+---
+
+## Rules
+
+- Cart minimal 1 item.
+- Total transaksi harus lebih dari 0.
+- Voucher harus valid.

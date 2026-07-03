@@ -4,17 +4,20 @@
 
 Mengelola stok produk.
 
-## Stock Adjustment
+---
 
-Stock dapat:
+## Operations
 
-- Bertambah
-- Berkurang
+- Stock In
+- Stock Out
+- Stock Adjustment
 
-## Stock History
-
-Setiap perubahan stok wajib dicatat.
+---
 
 ## Rules
 
 Stock tidak boleh negatif.
+
+Semua perubahan stok wajib dicatat.
+
+Gunakan database transaction.

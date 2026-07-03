@@ -294,17 +294,17 @@ Route::prefix('{current_team}')
                 ->middleware(EnsureTeamPermission::class.':voucher.delete');
         });
 
-        // // ── REPORTS ───────────────────────────────────────
-        // Route::prefix('reports')->name('reports.')->group(function () {
-        //     Route::get('/sales', [ReportController::class, 'sales'])->name('sales')
-        //         ->middleware(EnsureTeamPermission::class.':report.sales');
-        //     Route::get('/stock', [ReportController::class, 'stock'])->name('stock')
-        //         ->middleware(EnsureTeamPermission::class.':report.stock');
-        //     Route::get('/cashier', [ReportController::class, 'cashier'])->name('cashier')
-        //         ->middleware(EnsureTeamPermission::class.':report.cashier');
-        //     Route::get('/export', [ReportController::class, 'export'])->name('export')
-        //         ->middleware(EnsureTeamPermission::class.':report.export');
-        // });
+        // ── REPORTS ───────────────────────────────────────
+        Route::prefix('reports')->name('reports.')->group(function () {
+            Route::get('/sales', [ReportController::class, 'sales'])->name('sales')
+                ->middleware(EnsureTeamPermission::class.':report.sales');
+            Route::get('/stock', [ReportController::class, 'stock'])->name('stock')
+                ->middleware(EnsureTeamPermission::class.':report.stock');
+            Route::get('/cashier', [ReportController::class, 'cashier'])->name('cashier')
+                ->middleware(EnsureTeamPermission::class.':report.cashier');
+            Route::get('/export', [ReportController::class, 'export'])->name('export')
+                ->middleware(EnsureTeamPermission::class.':report.export');
+        });
 
         // // ── SETTINGS ──────────────────────────────────────
         // Route::prefix('settings')->name('settings.')->middleware(EnsureTeamPermission::class.':setting.system')->group(function () {

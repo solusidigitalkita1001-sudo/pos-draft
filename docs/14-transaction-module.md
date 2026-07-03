@@ -6,19 +6,31 @@
 - Refund
 - Return
 
-## Rules
+---
 
-Sale:
-- Mengurangi stock
+## Sale
 
-Refund:
-- Mengembalikan stock
+- Mengurangi stok.
+- Membuat riwayat transaksi.
 
-Return:
-- Mengembalikan stock
+---
+
+## Refund
+
+- Mengembalikan stok.
+- Membuat audit log.
+
+---
+
+## Return
+
+- Mengembalikan stok.
+- Menyimpan alasan return.
+
+---
 
 ## Consistency
 
-Semua perubahan stock harus menggunakan:
+Semua perubahan stok harus menggunakan:
 
 DB::transaction()
