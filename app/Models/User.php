@@ -19,7 +19,11 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, HasRoles, HasTeams, Notifiable, TwoFactorAuthenticatable;
+    use HasFactory, Notifiable, TwoFactorAuthenticatable;
+    use HasTeams, HasRoles {
+        HasTeams::teams insteadof HasRoles;
+        HasRoles::teams as teamsFromHasRoles;
+    }
 
     /**
      * Get all accessible menus for the user on their current team.
