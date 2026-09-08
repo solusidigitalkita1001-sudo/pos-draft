@@ -13,6 +13,7 @@ use App\Models\TransactionItem;
 use App\Models\User;
 use App\Models\Voucher;
 use App\Support\DocumentNumberGenerator;
+use App\Support\PaymentStatusResolver;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -81,11 +82,14 @@ class CreatePosTransactionAction
             $stockProducts = $this->lockAndValidateStock($team, $stockRequirements);
             $voucher = $this->resolveVoucher($team, $data['voucher_code'] ?? null, $subtotal);
             $discountTotal = $voucher?->discountFor($subtotal) ?? 0.0;
-            $grandTotal = max($subtotal - $discountTotal, 0);
+            $taxableAmount = max($subtotal - $discountTotal, 0);
+            $taxTotal = round($taxableAmount * ((float) $team->tax_rate / 100), 2);
+            $grandTotal = $taxableAmount + $taxTotal;
             $paidAmount = (float) $data['paid_amount'];
-            $this->validatePaidAmount($paidAmount, $grandTotal);
+            $this->validatePaidAmount($paidAmount);
 
             $changeAmount = max($paidAmount - $grandTotal, 0);
+            ['status' => $status, 'paymentStatus' => $paymentStatus] = PaymentStatusResolver::resolve($grandTotal, $paidAmount);
 
             $transaction = Transaction::create([
                 'team_id' => $team->id,
@@ -93,17 +97,17 @@ class CreatePosTransactionAction
                 'voucher_id' => $voucher?->id,
                 'invoice_number' => DocumentNumberGenerator::generate('POS', 'transactions', 'invoice_number', $team->id),
                 'customer_name' => $data['customer_name'] ?? null,
-                'status' => Transaction::STATUS_COMPLETED,
-                'payment_status' => Transaction::PAYMENT_STATUS_PAID,
+                'status' => $status,
+                'payment_status' => $paymentStatus,
                 'payment_method' => $data['payment_method'],
                 'subtotal' => $subtotal,
                 'discount_total' => $discountTotal,
-                'tax_total' => 0,
+                'tax_total' => $taxTotal,
                 'grand_total' => $grandTotal,
                 'paid_amount' => $paidAmount,
                 'change_amount' => $changeAmount,
                 'note' => $data['note'] ?? null,
-                'paid_at' => now(),
+                'paid_at' => $paymentStatus === Transaction::PAYMENT_STATUS_UNPAID ? null : now(),
             ]);
 
             foreach ($items as $item) {
@@ -141,17 +145,11 @@ class CreatePosTransactionAction
             ->keyBy('id');
     }
 
-    private function validatePaidAmount(float $paidAmount, float $grandTotal): void
+    private function validatePaidAmount(float $paidAmount): void
     {
         if ($paidAmount <= 0) {
             throw ValidationException::withMessages([
                 'paid_amount' => 'Jumlah bayar wajib diisi.',
-            ]);
-        }
-
-        if ($paidAmount < $grandTotal) {
-            throw ValidationException::withMessages([
-                'paid_amount' => 'Nominal pembayaran kurang dari total transaksi.',
             ]);
         }
     }

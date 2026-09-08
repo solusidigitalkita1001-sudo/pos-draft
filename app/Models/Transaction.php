@@ -33,6 +33,9 @@ class Transaction extends Model
         'change_amount',
         'note',
         'paid_at',
+        'void_reason',
+        'voided_at',
+        'voided_by',
     ];
 
     protected $casts = [
@@ -43,6 +46,7 @@ class Transaction extends Model
         'paid_amount' => 'decimal:2',
         'change_amount' => 'decimal:2',
         'paid_at' => 'datetime',
+        'voided_at' => 'datetime',
     ];
 
     public function team(): BelongsTo
@@ -53,6 +57,11 @@ class Transaction extends Model
     public function cashier(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by');
     }
 
     public function voucher(): BelongsTo

@@ -4,10 +4,18 @@ namespace App\Actions\Pos;
 
 use App\Models\Team;
 use App\Models\Transaction;
+use App\Support\PaymentStatusResolver;
 use Illuminate\Validation\ValidationException;
 
 class ProcessTransactionPaymentAction
 {
+    /**
+     * Tambah pembayaran ke transaksi yang sudah ada (melunasi transaksi
+     * yang statusnya partial/unpaid). Menerima top-up SEBAGIAN juga —
+     * tidak wajib langsung melunasi semua sisa tagihan dalam satu kali
+     * bayar, konsisten dengan alur checkout awal yang sekarang juga
+     * menerima partial payment.
+     */
     public function execute(Team $team, Transaction $transaction, array $data): Transaction
     {
         if ($transaction->team_id !== $team->id) {
@@ -25,13 +33,16 @@ class ProcessTransactionPaymentAction
         $grandTotal = (float) $transaction->grand_total;
         $remainingAmount = max($grandTotal - $existingPaidAmount, 0);
 
-        $this->validatePaidAmount($receivedAmount, $remainingAmount);
+        $this->validateReceivedAmount($receivedAmount, $remainingAmount);
+
+        $newPaidAmount = $existingPaidAmount + $receivedAmount;
+        ['status' => $status, 'paymentStatus' => $paymentStatus] = PaymentStatusResolver::resolve($grandTotal, $newPaidAmount);
 
         $transaction->update([
-            'status' => Transaction::STATUS_COMPLETED,
-            'payment_status' => Transaction::PAYMENT_STATUS_PAID,
+            'status' => $status,
+            'payment_status' => $paymentStatus,
             'payment_method' => $data['payment_method'],
-            'paid_amount' => $existingPaidAmount + $receivedAmount,
+            'paid_amount' => $newPaidAmount,
             'change_amount' => max($receivedAmount - $remainingAmount, 0),
             'paid_at' => now(),
         ]);
@@ -39,17 +50,17 @@ class ProcessTransactionPaymentAction
         return $transaction->refresh();
     }
 
-    private function validatePaidAmount(float $paidAmount, float $remainingAmount): void
+    private function validateReceivedAmount(float $receivedAmount, float $remainingAmount): void
     {
-        if ($paidAmount <= 0) {
+        if ($receivedAmount <= 0) {
             throw ValidationException::withMessages([
                 'paid_amount' => 'Jumlah bayar wajib diisi.',
             ]);
         }
 
-        if ($paidAmount < $remainingAmount) {
+        if ($remainingAmount <= 0) {
             throw ValidationException::withMessages([
-                'paid_amount' => 'Nominal pembayaran kurang dari sisa tagihan.',
+                'paid_amount' => 'Transaksi ini sudah lunas.',
             ]);
         }
     }

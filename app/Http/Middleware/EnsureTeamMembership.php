@@ -2,14 +2,25 @@
 
 namespace App\Http\Middleware;
 
-use App\Enums\TeamRole;
+use App\Actions\Organizations\CreateOrganizationAction;
+use App\Actions\Teams\CreateTeam;
+use App\Enums\PlanCode;
+use App\Models\Plan;
 use App\Models\Team;
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureTeamMembership
 {
+    public function __construct(
+        private CreateOrganizationAction $createOrganization,
+        private CreateTeam $createTeam,
+    ) {
+        //
+    }
+
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
@@ -41,6 +52,18 @@ class EnsureTeamMembership
             return $this->redirectToUserTeam($user, "Anda bukan anggota tim \"{$team->name}\".");
         }
 
+        // Blokir akses kalau subscription organization-nya sudah
+        // suspended/canceled — arahkan ke halaman Toko Saya (di luar
+        // prefix {current_team}) supaya user tetap bisa lihat status
+        // & memperpanjang paket, tapi tidak bisa transaksi di toko.
+        $subscription = $team->organization?->currentSubscription();
+
+        if ($subscription && ! $subscription->isUsable()) {
+            return redirect()
+                ->route('organizations.stores')
+                ->with('error', 'Akses toko dibatasi sementara karena langganan belum diperpanjang.');
+        }
+
         // Set current team jika berbeda
         if ($user->current_team_id !== $team->id) {
             $user->update(['current_team_id' => $team->id]);
@@ -63,7 +86,7 @@ class EnsureTeamMembership
      * Redirect user ke dashboard team mereka yang valid.
      * Jika tidak punya team, buat personal team dulu.
      */
-    private function redirectToUserTeam(\App\Models\User $user, ?string $error = null): Response
+    private function redirectToUserTeam(User $user, ?string $error = null): Response
     {
         // Query langsung, hindari relasi cached
         $currentTeamId = $user->current_team_id;
@@ -96,7 +119,10 @@ class EnsureTeamMembership
             }
         }
 
-        // User tidak punya team sama sekali — buat personal team
+        // User tidak punya team sama sekali — buat personal team.
+        // Selalu lewat CreateOrganizationAction + CreateTeam, supaya
+        // TIDAK PERNAH ada team baru yang lolos tanpa organization_id
+        // (itu akan bikin quota enforcement bolong).
         $team = $this->createPersonalTeam($user);
         return $this->buildRedirect($team, $error);
     }
@@ -116,23 +142,20 @@ class EnsureTeamMembership
     /**
      * Buat personal team untuk user yang belum punya team.
      */
-    private function createPersonalTeam(\App\Models\User $user): Team
+    private function createPersonalTeam(User $user): Team
     {
-        $team = Team::create([
-            'name'        => $user->name . "'s Team",
-            'is_personal' => true,
-        ]);
+        $organization = $user->currentOrganization
+            ?? $this->createOrganization->execute(
+                user: $user,
+                name: $user->name."'s Organization",
+                plan: Plan::findByCode(PlanCode::Basic),
+            );
 
-        \DB::table('team_members')->insert([
-            'team_id'    => $team->id,
-            'user_id'    => $user->id,
-            'role'       => TeamRole::Owner->value,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        $user->update(['current_team_id' => $team->id]);
-
-        return $team;
+        return $this->createTeam->handle(
+            user: $user,
+            name: $user->name."'s Team",
+            organization: $organization,
+            isPersonal: true,
+        );
     }
 }

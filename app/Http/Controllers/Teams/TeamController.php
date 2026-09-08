@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Teams;
 
 use App\Actions\Teams\CreateTeam;
 use App\Enums\TeamRole;
+use App\Exceptions\StoreQuotaExceededException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Teams\DeleteTeamRequest;
 use App\Http\Requests\Teams\SaveTeamRequest;
@@ -35,7 +36,23 @@ class TeamController extends Controller
      */
     public function store(SaveTeamRequest $request, CreateTeam $createTeam): RedirectResponse
     {
-        $team = $createTeam->handle($request->user(), $request->validated('name'));
+        $user = $request->user();
+        $organization = $user->currentOrganization;
+
+        abort_unless($organization, 403, 'Anda belum memiliki organization aktif.');
+
+        Gate::authorize('create', [Team::class, $organization]);
+
+        try {
+            $team = $createTeam->handle($user, $request->validated('name'), $organization);
+        } catch (StoreQuotaExceededException) {
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => __('Kuota toko pada paket Anda sudah penuh. Silakan upgrade paket untuk menambah toko.'),
+            ]);
+
+            return to_route('organizations.stores');
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Team created.')]);
 
@@ -55,6 +72,7 @@ class TeamController extends Controller
                 'name' => $team->name,
                 'slug' => $team->slug,
                 'isPersonal' => $team->is_personal,
+                'taxRate' => (float) $team->tax_rate,
             ],
             'members' => $team->members()->get()->map(fn ($member) => [
                 'id' => $member->id,
@@ -89,7 +107,10 @@ class TeamController extends Controller
         $team = DB::transaction(function () use ($request, $team) {
             $team = Team::whereKey($team->id)->lockForUpdate()->firstOrFail();
 
-            $team->update(['name' => $request->validated('name')]);
+            $team->update([
+                'name' => $request->validated('name'),
+                'tax_rate' => $request->validated('tax_rate') ?? 0,
+            ]);
 
             return $team;
         });

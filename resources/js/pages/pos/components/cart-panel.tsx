@@ -16,12 +16,15 @@ import type { SearchableSelectOption } from '../pos-utils';
 interface Props {
     cart: CartItem[];
     subtotal: number;
+    taxRate: number;
     paymentMethods: PaymentMethod[];
     vouchers: AvailableVoucher[];
     canApplyVoucher: boolean;
     appliedVoucher: AppliedVoucher | null;
     voucherMessage: string | null;
     voucherChecking: boolean;
+    availablePromotions: (PosItem & { suggested_quantity: number })[];
+    onApplyPromotion: (promotion: PosItem & { suggested_quantity: number }) => void;
 
     // Form state
     customerName: string;
@@ -48,12 +51,15 @@ interface Props {
 export function CartPanel({
     cart,
     subtotal,
+    taxRate,
     paymentMethods,
     vouchers,
     canApplyVoucher,
     appliedVoucher,
     voucherMessage,
     voucherChecking,
+    availablePromotions,
+    onApplyPromotion,
     customerName,
     voucherCode,
     paymentMethod,
@@ -74,8 +80,19 @@ export function CartPanel({
 }: Props) {
     const paid = parseNumberInput(paidAmount);
     const discountTotal = appliedVoucher?.discount_total ?? 0;
-    const grandTotal = Math.max(subtotal - discountTotal, 0);
+    const appliedPromotionIds = new Set(
+        cart
+            .filter((item) => item.product.item_type === 'promotion')
+            .map((item) => item.product.item_id),
+    );
+    const suggestedPromotions = availablePromotions.filter(
+        (promotion) => !appliedPromotionIds.has(promotion.item_id),
+    );
+    const taxableAmount = Math.max(subtotal - discountTotal, 0);
+    const taxTotal = Math.round(taxableAmount * (taxRate / 100));
+    const grandTotal = taxableAmount + taxTotal;
     const changeAmount = Math.max(paid - grandTotal, 0);
+    const remainingAmount = Math.max(grandTotal - paid, 0);
     const paymentOptions = useMemo<SearchableSelectOption[]>(
         () => paymentMethods.map((method) => ({ value: method.value, label: method.label })),
         [paymentMethods],
@@ -198,6 +215,42 @@ export function CartPanel({
                                 </div>
                             )}
                         </div>
+
+                        {suggestedPromotions.length > 0 && (
+                            <div style={{ display: 'grid', gap: '6px', border: '1px dashed hsl(142 70% 36%)', borderRadius: '8px', padding: '10px' }}>
+                                <div style={{ fontSize: '12px', fontWeight: 700, color: 'hsl(142 70% 32%)' }}>
+                                    🎉 Promo Tersedia
+                                </div>
+                                {suggestedPromotions.map((promotion) => (
+                                    <div
+                                        key={promotion.item_id}
+                                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}
+                                    >
+                                        <span style={{ fontSize: '12px', color: 'var(--foreground)' }}>
+                                            {promotion.name}
+                                            {promotion.suggested_quantity > 1 ? ` ×${promotion.suggested_quantity}` : ''}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => onApplyPromotion(promotion)}
+                                            style={{
+                                                fontSize: '11px',
+                                                fontWeight: 700,
+                                                padding: '4px 10px',
+                                                borderRadius: '999px',
+                                                border: 'none',
+                                                backgroundColor: 'hsl(142 70% 36%)',
+                                                color: 'white',
+                                                cursor: 'pointer',
+                                                whiteSpace: 'nowrap',
+                                            }}
+                                        >
+                                            Terapkan
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     )}
 
                     <SearchableSelect
@@ -261,9 +314,23 @@ export function CartPanel({
                             value={`-${formatCurrency(discountTotal)}`}
                         />
                     )}
+                    {taxTotal > 0 && (
+                        <SummaryRow
+                            label={`Pajak (${taxRate}%)`}
+                            value={formatCurrency(taxTotal)}
+                        />
+                    )}
                     <SummaryRow label="Total"     value={formatCurrency(grandTotal)} strong />
                     <SummaryRow label="Bayar"     value={formatCurrency(paid)} />
-                    <SummaryRow label="Kembalian" value={formatCurrency(changeAmount)} strong />
+                    {remainingAmount > 0 ? (
+                        <SummaryRow
+                            label="Sisa Tagihan"
+                            value={formatCurrency(remainingAmount)}
+                            strong
+                        />
+                    ) : (
+                        <SummaryRow label="Kembalian" value={formatCurrency(changeAmount)} strong />
+                    )}
                 </div>
 
                 {/* Submit button */}

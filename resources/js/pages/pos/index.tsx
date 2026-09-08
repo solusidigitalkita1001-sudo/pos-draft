@@ -1,6 +1,6 @@
 import { Head, router } from '@inertiajs/react';
 import { Receipt } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useCart } from '@/hooks/use-cart';
 import { useProductSearch } from '@/hooks/use-product-search';
 import type { AppliedVoucher, AvailableVoucher, PaymentMethod, PosItem, RecentTransaction } from '@/types/pos';
@@ -16,9 +16,11 @@ interface Props {
     teamSlug: string;
     paymentMethods: PaymentMethod[];
     canApplyVoucher: boolean;
+    taxRate: number;
+    canVoid: boolean;
 }
 
-export default function PosIndex({ products, recentTransactions, vouchers, teamSlug, paymentMethods, canApplyVoucher }: Props) {
+export default function PosIndex({ products, recentTransactions, vouchers, teamSlug, paymentMethods, canApplyVoucher, taxRate, canVoid }: Props) {
     const defaultPaymentMethod = paymentMethods[0]?.value ?? 'cash';
 
     // ── Hooks ──────────────────────────────────────────────────────────────────
@@ -36,6 +38,7 @@ export default function PosIndex({ products, recentTransactions, vouchers, teamS
     const [appliedVoucher, setAppliedVoucher]  = useState<AppliedVoucher | null>(null);
     const [voucherMessage, setVoucherMessage]  = useState<string | null>(null);
     const [voucherChecking, setVoucherChecking] = useState(false);
+    const [availablePromotions, setAvailablePromotions] = useState<(PosItem & { suggested_quantity: number })[]>([]);
 
     const activeVoucher = voucherCode.trim() !== ''
         && subtotal > 0
@@ -45,7 +48,6 @@ export default function PosIndex({ products, recentTransactions, vouchers, teamS
         : null;
     const activeVoucherMessage = voucherCode.trim() !== '' && !activeVoucher ? voucherMessage : null;
     const discountTotal = activeVoucher?.discount_total ?? 0;
-    const grandTotal = useMemo(() => Math.max(subtotal - discountTotal, 0), [discountTotal, subtotal]);
 
     useEffect(() => {
         if (!canApplyVoucher) {
@@ -104,6 +106,59 @@ export default function PosIndex({ products, recentTransactions, vouchers, teamS
         };
     }, [canApplyVoucher, cart.length, subtotal, teamSlug, voucherCode]);
 
+    // Deteksi otomatis promosi BXGY dari isi keranjang — kasir tidak
+    // perlu tahu/mencari nama promosinya secara manual lagi.
+    const cartProductLines = cart
+        .filter((item) => item.product.item_type === 'product')
+        .map((item) => ({ product_id: item.product.item_id, quantity: item.quantity }));
+    const cartProductLinesKey = JSON.stringify(cartProductLines);
+
+    useEffect(() => {
+        if (cartProductLines.length === 0) {
+            setAvailablePromotions([]);
+
+            return;
+        }
+
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => {
+            fetch(`/${teamSlug}/pos/promotions/evaluate`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    ...csrfHeaders(),
+                },
+                body: JSON.stringify({ items: cartProductLines }),
+                signal: controller.signal,
+            })
+                .then(async (response) => {
+                    if (!response.ok) return;
+
+                    const data = (await response.json()) as EvaluatePromotionsResponse;
+                    setAvailablePromotions(data.promotions ?? []);
+                })
+                .catch((error: unknown) => {
+                    if (error instanceof DOMException && error.name === 'AbortError') {
+                        return;
+                    }
+                });
+        }, 320);
+
+        return () => {
+            window.clearTimeout(timeout);
+            controller.abort();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cartProductLinesKey, teamSlug]);
+
+    function applyPromotion(promotion: PosItem & { suggested_quantity: number }) {
+        addToCart(promotion);
+        setQuantity(promotion, promotion.suggested_quantity);
+    }
+
     // ── Validation ────────────────────────────────────────────────────────────
     function validateCheckout(): string | null {
         const paid = parseNumberInput(paidAmount);
@@ -122,10 +177,6 @@ export default function PosIndex({ products, recentTransactions, vouchers, teamS
 
         if (!Number.isFinite(paid) || paid <= 0) {
             return 'Jumlah bayar wajib lebih dari 0.';
-        }
-
-        if (paid < grandTotal) {
-            return 'Nominal pembayaran kurang dari total transaksi.';
         }
 
         return null;
@@ -219,6 +270,7 @@ export default function PosIndex({ products, recentTransactions, vouchers, teamS
                             paymentMethods={paymentMethods}
                             defaultPaymentMethod={defaultPaymentMethod}
                             teamSlug={teamSlug}
+                            canVoid={canVoid}
                         />
                     </div>
 
@@ -226,12 +278,15 @@ export default function PosIndex({ products, recentTransactions, vouchers, teamS
                     <CartPanel
                         cart={cart}
                         subtotal={subtotal}
+                        taxRate={taxRate}
                         paymentMethods={paymentMethods}
                         vouchers={vouchers}
                         canApplyVoucher={canApplyVoucher}
                         appliedVoucher={activeVoucher}
                         voucherMessage={activeVoucherMessage}
                         voucherChecking={voucherChecking}
+                        availablePromotions={availablePromotions}
+                        onApplyPromotion={applyPromotion}
                         customerName={customerName}
                         voucherCode={voucherCode}
                         paymentMethod={paymentMethod}
@@ -269,6 +324,10 @@ interface ValidateVoucherResponse {
     voucher: Omit<AppliedVoucher, 'discount_total'>;
     discount_total: number | string;
     message?: string;
+}
+
+interface EvaluatePromotionsResponse {
+    promotions: (PosItem & { suggested_quantity: number })[];
 }
 
 function csrfHeaders(): Record<string, string> {

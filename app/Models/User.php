@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Concerns\HasOrganizations;
 use App\Concerns\HasTeams;
+use App\Enums\NotificationPreferenceKey;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -14,13 +16,12 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
 use Spatie\Permission\Exceptions\PermissionDoesNotExist;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'password', 'current_team_id'])]
+#[Fillable(['name', 'email', 'password', 'current_team_id', 'current_organization_id', 'notification_preferences'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, TwoFactorAuthenticatable;
-    use HasTeams, HasRoles {
+    use HasFactory, HasOrganizations, HasRoles, HasTeams, Notifiable, TwoFactorAuthenticatable {
         HasTeams::teams insteadof HasRoles;
         HasRoles::teams as teamsFromHasRoles;
     }
@@ -166,8 +167,22 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'is_platform_admin' => 'boolean',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
+            'notification_preferences' => 'array',
         ];
+    }
+
+    /**
+     * Determine if the user wants to receive a given (toggleable)
+     * billing/subscription notification. Defaults to TRUE (opt-out,
+     * not opt-in) when the column is null or the key was never set —
+     * existing users shouldn't suddenly stop getting emails just
+     * because this feature shipped.
+     */
+    public function wantsNotification(NotificationPreferenceKey $key): bool
+    {
+        return (bool) ($this->notification_preferences[$key->value] ?? true);
     }
 }

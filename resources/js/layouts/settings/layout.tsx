@@ -6,6 +6,10 @@ import { Separator } from '@/components/ui/separator';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { cn, toUrl } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
+import { edit as editNotifications } from '@/routes/notifications';
+import { stores as organizationStores } from '@/routes/organizations';
+import { index as organizationInvoices } from '@/routes/organizations/invoices';
+import { index as organizationMembers } from '@/routes/organizations/members';
 import { edit } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
 import { index as teams } from '@/routes/teams';
@@ -25,6 +29,26 @@ const sidebarNavItems: NavItem[] = [
     {
         title: 'Teams',
         href: teams(),
+        icon: null,
+    },
+    {
+        title: 'Billing',
+        href: organizationStores(),
+        icon: null,
+    },
+    {
+        title: 'Anggota',
+        href: organizationMembers(),
+        icon: null,
+    },
+    {
+        title: 'Invoice',
+        href: organizationInvoices(),
+        icon: null,
+    },
+    {
+        title: 'Notifikasi',
+        href: editNotifications(),
         icon: null,
     },
     {

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MenuController;
+use App\Http\Controllers\Organizations\OrganizationInvitationController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
@@ -33,6 +34,11 @@ Route::middleware(['auth'])->group(function () {
         'invitations/{invitation}/accept',
         [TeamInvitationController::class, 'accept']
     )->name('invitations.accept');
+
+    Route::get(
+        'organization-invitations/{invitation}/accept',
+        [OrganizationInvitationController::class, 'accept']
+    )->name('organization-invitations.accept');
 
     Route::post('/current-team/switch/{team:slug}', function (\App\Models\Team $team) {
         $user = request()->user();
@@ -238,8 +244,10 @@ Route::prefix('{current_team}')
             Route::get('/', [PosController::class, 'index'])->name('index');
             Route::get('/products/search', [PosController::class, 'searchProducts'])->name('products.search');
             Route::post('/voucher/validate', [PosController::class, 'validateVoucher'])->name('voucher.validate');
+            Route::post('/promotions/evaluate', [PosController::class, 'evaluatePromotions'])->name('promotions.evaluate');
             Route::post('/transaction', [PosController::class, 'createTransaction'])->name('transaction.create');
             Route::post('/transaction/{transaction}/payment', [PosController::class, 'processPayment'])->name('transaction.payment');
+            Route::post('/transaction/{transaction}/void', [PosController::class, 'voidTransaction'])->name('transaction.void');
         });
 
         // ── TRANSACTIONS ──────────────────────────────────

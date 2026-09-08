@@ -2,7 +2,10 @@
 
 use App\Models\User;
 use Illuminate\Auth\Notifications\VerifyEmail;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+
+uses(RefreshDatabase::class);
 
 test('sends verification notification', function () {
     Notification::fake();

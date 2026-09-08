@@ -4,10 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Actions\Pos\CreatePosTransactionAction;
 use App\Actions\Pos\ProcessTransactionPaymentAction;
+use App\Actions\Pos\VoidTransactionAction;
+use App\Actions\ProductPromotion\EvaluateCartPromotionsAction;
 use App\Http\Requests\Pos\CreatePosTransactionRequest;
+use App\Http\Requests\Pos\EvaluateCartPromotionsRequest;
 use App\Http\Requests\Pos\ProcessPaymentRequest;
 use App\Http\Requests\Pos\SearchProductsRequest;
 use App\Http\Requests\Pos\ValidateVoucherRequest;
+use App\Http\Requests\Pos\VoidTransactionRequest;
 use App\Models\Product;
 use App\Models\ProductPackage;
 use App\Models\ProductPromotion;
@@ -25,6 +29,8 @@ class PosController extends Controller
     public function __construct(
         private CreatePosTransactionAction $createPosTransactionAction,
         private ProcessTransactionPaymentAction $processTransactionPaymentAction,
+        private VoidTransactionAction $voidTransactionAction,
+        private EvaluateCartPromotionsAction $evaluateCartPromotionsAction,
     ) {}
 
     public function index(Request $request): Response
@@ -84,6 +90,7 @@ class PosController extends Controller
                 'change_amount',
                 'created_at',
                 'user_id',
+                'void_reason',
             ]);
 
         $vouchers = $team->vouchers()
@@ -115,6 +122,8 @@ class PosController extends Controller
                 ['value' => 'transfer', 'label' => 'Transfer'],
             ],
             'canApplyVoucher' => $authUser->canOnCurrentTeam('voucher.apply'),
+            'taxRate' => (float) $team->tax_rate,
+            'canVoid' => $authUser->ownsTeam($team),
         ]);
     }
 
@@ -172,6 +181,27 @@ class PosController extends Controller
         ]);
     }
 
+    /**
+     * Deteksi promosi BXGY yang aktif dari isi keranjang saat ini —
+     * kasir tidak perlu tahu/mencari nama promosinya secara manual.
+     * Mengembalikan promosi dalam bentuk PosItem (sama seperti hasil
+     * pencarian katalog) supaya frontend bisa langsung addToCart() tanpa
+     * perlu bentuk data yang berbeda.
+     */
+    public function evaluatePromotions(EvaluateCartPromotionsRequest $request): JsonResponse
+    {
+        $team = $request->user()->currentTeam;
+
+        $results = $this->evaluateCartPromotionsAction->execute($team, $request->validated('items', []));
+
+        return response()->json([
+            'promotions' => $results->map(fn (array $result) => [
+                ...$this->formatPromotionForPos($result['promotion']),
+                'suggested_quantity' => $result['times'],
+            ])->values(),
+        ]);
+    }
+
     public function validateVoucher(ValidateVoucherRequest $request): JsonResponse
     {
         $team = $request->user()->currentTeam;
@@ -223,6 +253,25 @@ class PosController extends Controller
         $this->processTransactionPaymentAction->execute($team, $transaction, $request->validated());
 
         Inertia::flash('success', "Pembayaran {$transaction->invoice_number} berhasil diperbarui.");
+
+        return back();
+    }
+
+    public function voidTransaction(VoidTransactionRequest $request, string $current_team, Transaction $transaction)
+    {
+        $team = $request->user()->currentTeam;
+        $authUser = $request->user();
+
+        abort_unless($authUser->ownsTeam($team), 403, 'Hanya owner yang dapat membatalkan transaksi.');
+
+        $transaction = $this->voidTransactionAction->execute(
+            $team,
+            $transaction,
+            $authUser,
+            $request->validated('reason'),
+        );
+
+        Inertia::flash('success', "Transaksi {$transaction->invoice_number} dibatalkan, stok sudah dikembalikan.");
 
         return back();
     }

@@ -2,8 +2,10 @@
 
 namespace App\Http\Responses;
 
-use App\Enums\TeamRole;
-use App\Models\Team;
+use App\Actions\Organizations\CreateOrganizationAction;
+use App\Actions\Teams\CreateTeam;
+use App\Enums\PlanCode;
+use App\Models\Plan;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\URL;
 use Laravel\Fortify\Contracts\RegisterResponse as RegisterResponseContract;
@@ -11,20 +13,39 @@ use Symfony\Component\HttpFoundation\Response;
 
 class RegisterResponse implements RegisterResponseContract
 {
+    public function __construct(
+        private CreateOrganizationAction $createOrganization,
+        private CreateTeam $createTeam,
+    ) {
+        //
+    }
+
     public function toResponse($request): Response
     {
         $user = $request->user();
 
-        // Ambil atau buat personal team
+        // Normal path: CreateNewUser (Fortify action) already created the
+        // organization + personal team during registration. This is a
+        // defensive fallback for the rare case that didn't happen —
+        // deliberately routed through the same Actions so we never end
+        // up with a team that has no organization_id.
         $team = $user->personalTeam()
             ?? $user->teams()->orderBy('name')->first();
 
         if (! $team) {
-            $team = Team::create([
-                'name'        => $user->name . "'s Team",
-                'is_personal' => true,
-            ]);
-            $team->members()->attach($user->id, ['role' => TeamRole::Owner->value]);
+            $organization = $user->currentOrganization
+                ?? $this->createOrganization->execute(
+                    user: $user,
+                    name: $user->name."'s Organization",
+                    plan: Plan::findByCode(PlanCode::Basic),
+                );
+
+            $team = $this->createTeam->handle(
+                user: $user,
+                name: $user->name."'s Team",
+                organization: $organization,
+                isPersonal: true,
+            );
         }
 
         if (! $user->current_team_id) {

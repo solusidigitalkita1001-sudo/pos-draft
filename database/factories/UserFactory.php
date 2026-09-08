@@ -2,7 +2,11 @@
 
 namespace Database\Factories;
 
+use App\Enums\OrganizationRole;
+use App\Enums\SubscriptionStatus;
 use App\Enums\TeamRole;
+use App\Models\Organization;
+use App\Models\Plan;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -43,8 +47,35 @@ class UserFactory extends Factory
      */
     public function configure(): static
     {
-        return $this->afterCreating(function ($user) {
+        return $this->afterCreating(function (User $user) {
+            $organization = Organization::factory()->create([
+                'name' => $user->name."'s Organization",
+            ]);
+
+            $organization->memberships()->create([
+                'user_id' => $user->id,
+                'role' => OrganizationRole::Owner,
+            ]);
+
+            // Generous max_stores (10) so existing/unrelated tests that
+            // create a handful of teams for one factory user don't
+            // accidentally trip the store quota. Tests that specifically
+            // exercise quota behaviour should build their own
+            // Organization/Plan/Subscription instead of relying on this.
+            $plan = Plan::factory()->create([
+                'max_stores' => 10,
+                'max_owners' => 5,
+            ]);
+
+            \App\Models\Subscription::factory()->active()->create([
+                'organization_id' => $organization->id,
+                'plan_id' => $plan->id,
+            ]);
+
+            $user->switchOrganization($organization);
+
             $team = Team::factory()->personal()->create([
+                'organization_id' => $organization->id,
                 'name' => $user->name."'s Team",
             ]);
 

@@ -2,7 +2,9 @@
 
 namespace App\Policies;
 
+use App\Enums\OrganizationRole;
 use App\Enums\TeamPermission;
+use App\Models\Organization;
 use App\Models\Team;
 use App\Models\User;
 
@@ -25,11 +27,21 @@ class TeamPolicy
     }
 
     /**
-     * Determine whether the user can create models.
+     * Determine whether the user can create a new store under the given
+     * organization. This only checks AUTHORIZATION (is this user allowed
+     * to manage stores for this organization at all) — the actual store
+     * QUOTA is enforced separately in CreateTeam, since quota is a
+     * business rule tied to the subscription, not an access-control rule.
      */
-    public function create(User $user): bool
+    public function create(User $user, ?Organization $organization = null): bool
     {
-        return true;
+        if (! $organization) {
+            return true;
+        }
+
+        $role = $user->organizationRole($organization);
+
+        return $role === OrganizationRole::Owner || $role === OrganizationRole::Manager;
     }
 
     /**

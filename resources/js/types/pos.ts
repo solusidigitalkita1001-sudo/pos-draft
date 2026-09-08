@@ -80,6 +80,7 @@ export interface RecentTransaction {
     paid_amount: string;
     change_amount: string;
     created_at: string;
+    void_reason?: string | null;
     cashier?: { id: number; name: string } | null;
     voucher?: VoucherSummary | null;
     items: RecentTransactionItem[];

@@ -124,6 +124,33 @@ export default function TeamEdit({
                                             <InputError message={errors.name} />
                                         </div>
 
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="tax_rate">
+                                                Tarif Pajak (%)
+                                            </Label>
+                                            <Input
+                                                id="tax_rate"
+                                                name="tax_rate"
+                                                type="number"
+                                                step="0.01"
+                                                min={0}
+                                                max={100}
+                                                data-test="team-tax-rate-input"
+                                                defaultValue={team.taxRate}
+                                                placeholder="0"
+                                            />
+                                            <p className="text-sm text-muted-foreground">
+                                                Diterapkan otomatis ke
+                                                setiap transaksi POS di
+                                                toko ini. Kosongkan atau
+                                                isi 0 kalau toko tidak
+                                                mengenakan pajak.
+                                            </p>
+                                            <InputError
+                                                message={errors.tax_rate}
+                                            />
+                                        </div>
+
                                         <div className="flex items-center gap-4">
                                             <Button
                                                 type="submit"

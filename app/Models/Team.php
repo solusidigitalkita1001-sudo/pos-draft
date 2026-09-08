@@ -8,11 +8,12 @@ use Database\Factories\TeamFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['name', 'slug', 'is_personal'])]
+#[Fillable(['organization_id', 'name', 'slug', 'is_personal', 'tax_rate'])]
 class Team extends Model
 {
     /** @use HasFactory<TeamFactory> */
@@ -36,6 +37,16 @@ class Team extends Model
                 $team->slug = static::generateUniqueTeamSlug($team->name, $team->id);
             }
         });
+    }
+
+    /**
+     * Get the organization (billing account) this team/store belongs to.
+     *
+     * @return BelongsTo<Organization, $this>
+     */
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
     }
 
     /**
@@ -150,6 +161,7 @@ class Team extends Model
     {
         return [
             'is_personal' => 'boolean',
+            'tax_rate' => 'decimal:2',
         ];
     }
 

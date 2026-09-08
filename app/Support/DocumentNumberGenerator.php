@@ -5,7 +5,7 @@ namespace App\Support;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Menghasilkan nomor dokumen berurutan per tim dan per hari.
+ * Menghasilkan nomor dokumen berurutan per scope (team/organization) dan per hari.
  *
  * Format: {PREFIX}-{YYYYMMDD}-{0001}
  *
@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
  *   DocumentNumberGenerator::generate('RFN', 'transaction_refunds', 'refund_number', $team->id);
  *   DocumentNumberGenerator::generate('RTN', 'transaction_returns', 'return_number', $team->id);
  *   DocumentNumberGenerator::generate('TRX', 'transactions', 'invoice_number', $team->id);
+ *   DocumentNumberGenerator::generate('SUB', 'subscription_invoices', 'order_id', $organization->id, scopeColumn: 'organization_id');
  *
  * CATATAN: Metode ini rentan terhadap race condition pada traffic sangat tinggi.
  * Untuk skala besar, pertimbangkan menggunakan sequence database atau Redis INCR.
@@ -26,15 +27,16 @@ class DocumentNumberGenerator
         string $prefix,
         string $table,
         string $column,
-        int $teamId,
+        int $scopeId,
         ?string $date = null,
         int $padding = 4,
+        string $scopeColumn = 'team_id',
     ): string {
         $dateString = $date ?? now()->format('Ymd');
         $fullPrefix = "{$prefix}-{$dateString}-";
 
         $count = DB::table($table)
-            ->where('team_id', $teamId)
+            ->where($scopeColumn, $scopeId)
             ->where($column, 'like', $fullPrefix.'%')
             ->count() + 1;
 

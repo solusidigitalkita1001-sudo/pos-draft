@@ -8,17 +8,27 @@ use App\Http\Middleware\SetTeamUrlDefaults;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        then: function () {
+            Route::middleware('web')->group(base_path('routes/webhooks.php'));
+            Route::middleware('web')->group(base_path('routes/admin.php'));
+        },
     )
     ->withMiddleware(function (Middleware $middleware) {
         /**
          * Exclude semua team-scoped POST routes dari CSRF verification.
          * Keamanan tetap terjaga karena route ini dilindungi auth + EnsureTeamMembership.
+         *
+         * webhooks/midtrans dikecualikan karena Midtrans memanggil endpoint
+         * ini langsung (tanpa session/CSRF token) — keamanan endpoint ini
+         * dijaga lewat verifikasi signature Midtrans sendiri, bukan CSRF
+         * (lihat HandleMidtransNotificationAction).
          */
         $middleware->preventRequestForgery(except: [
             '*/users/*/set-password',
@@ -28,6 +38,7 @@ return Application::configure(basePath: dirname(__DIR__))
             '*/invitations/*',
             '*/roles',
             '*/roles/*',
+            'webhooks/midtrans',
         ]);
 
         /**

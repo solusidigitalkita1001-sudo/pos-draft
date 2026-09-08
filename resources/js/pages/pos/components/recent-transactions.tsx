@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/react';
-import { Banknote, ChevronDown } from 'lucide-react';
+import { Ban, Banknote, ChevronDown } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import type { PaymentMethod, RecentTransaction } from '@/types/pos';
 import {
@@ -25,11 +25,14 @@ interface Props {
     paymentMethods: PaymentMethod[];
     defaultPaymentMethod: string;
     teamSlug: string;
+    canVoid: boolean;
 }
 
-export function RecentTransactions({ transactions, paymentMethods, defaultPaymentMethod, teamSlug }: Props) {
+export function RecentTransactions({ transactions, paymentMethods, defaultPaymentMethod, teamSlug, canVoid }: Props) {
     const [expandedId, setExpandedId]       = useState<number | null>(null);
     const [processingId, setProcessingId]   = useState<number | null>(null);
+    const [voidingId, setVoidingId]         = useState<number | null>(null);
+    const [voidReasons, setVoidReasons]     = useState<Record<number, string>>({});
     const [forms, setForms]                 = useState<Record<number, SettlementForm>>({});
     const [errors, setErrors]               = useState<Record<string, string>>({});
     const paymentOptions = useMemo(
@@ -81,10 +84,6 @@ export function RecentTransactions({ transactions, paymentMethods, defaultPaymen
             return 'Jumlah bayar wajib lebih dari 0.';
         }
 
-        if (paid < remainingPayment(tx))       {
-            return 'Nominal pembayaran kurang dari sisa tagihan.';
-        }
-
         return null;
     }
 
@@ -113,6 +112,26 @@ export function RecentTransactions({ transactions, paymentMethods, defaultPaymen
                     return n;
                 }),
                 onFinish:  ()   => setProcessingId(null),
+            },
+        );
+    }
+
+    function voidTransaction(tx: RecentTransaction) {
+        setVoidingId(tx.id);
+
+        router.post(
+            `/${teamSlug}/pos/transaction/${tx.id}/void`,
+            { reason: voidReasons[tx.id] ?? '' },
+            {
+                preserveScroll: true,
+                onError: (e) => setErrors(e),
+                onSuccess: () => setVoidReasons((prev) => {
+                    const n = { ...prev };
+                    delete n[tx.id];
+
+                    return n;
+                }),
+                onFinish: () => setVoidingId(null),
             },
         );
     }
@@ -173,9 +192,13 @@ export function RecentTransactions({ transactions, paymentMethods, defaultPaymen
                                                 {tx.customer_name ?? 'Umum'}
                                             </td>
                                             <td style={{ padding: '12px 16px' }}>
-                                                <PosBadge color={tx.payment_status === 'paid' ? 'green' : 'amber'}>
-                                                    {paymentStatusLabel(tx.payment_status)}
-                                                </PosBadge>
+                                                {tx.status === 'void' ? (
+                                                    <PosBadge color="red">Dibatalkan</PosBadge>
+                                                ) : (
+                                                    <PosBadge color={tx.payment_status === 'paid' ? 'green' : 'amber'}>
+                                                        {paymentStatusLabel(tx.payment_status)}
+                                                    </PosBadge>
+                                                )}
                                             </td>
                                             <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800 }}>
                                                 {formatCurrency(tx.grand_total)}
@@ -235,7 +258,7 @@ export function RecentTransactions({ transactions, paymentMethods, defaultPaymen
                                                             <SummaryRow label="Total" value={formatCurrency(tx.grand_total)} strong />
                                                             <SummaryRow label="Bayar" value={formatCurrency(tx.paid_amount)} />
 
-                                                            {tx.payment_status !== 'paid' && (
+                                                            {tx.status !== 'void' && tx.payment_status !== 'paid' && (
                                                                 <div style={{ display: 'grid', gap: '8px', marginTop: '4px' }}>
                                                                     <SearchableSelect
                                                                         value={getForm(tx).payment_method}
@@ -274,7 +297,7 @@ export function RecentTransactions({ transactions, paymentMethods, defaultPaymen
                                                                 </div>
                                                             )}
 
-                                                            {tx.payment_status !== 'paid' && (
+                                                            {tx.status !== 'void' && tx.payment_status !== 'paid' && (
                                                                 <button
                                                                     onClick={() => settle(tx)}
                                                                     disabled={processingId === tx.id}
@@ -296,6 +319,47 @@ export function RecentTransactions({ transactions, paymentMethods, defaultPaymen
                                                                     {processingId === tx.id ? 'Memproses...' : 'Lunasi'}
                                                                 </button>
                                                             )}
+
+                                                            {tx.status === 'void' ? (
+                                                                <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginTop: '4px' }}>
+                                                                    Transaksi dibatalkan{tx.void_reason ? `: ${tx.void_reason}` : '.'}
+                                                                </div>
+                                                            ) : canVoid ? (
+                                                                <div style={{ borderTop: '1px dashed var(--border)', paddingTop: '10px', marginTop: '4px', display: 'grid', gap: '8px' }}>
+                                                                    <input
+                                                                        type="text"
+                                                                        value={voidReasons[tx.id] ?? ''}
+                                                                        onChange={(e) => setVoidReasons((prev) => ({ ...prev, [tx.id]: e.target.value }))}
+                                                                        placeholder="Alasan pembatalan (opsional)"
+                                                                        style={{ ...inputStyle, minHeight: '34px', fontSize: '12px' }}
+                                                                    />
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            if (window.confirm(`Batalkan transaksi ${tx.invoice_number}? Stok akan dikembalikan.`)) {
+                                                                                voidTransaction(tx);
+                                                                            }
+                                                                        }}
+                                                                        disabled={voidingId === tx.id}
+                                                                        style={{
+                                                                            minHeight: '34px',
+                                                                            borderRadius: '8px',
+                                                                            border: '1px solid hsl(0 72% 40%)',
+                                                                            backgroundColor: 'transparent',
+                                                                            color: 'hsl(0 72% 40%)',
+                                                                            cursor: voidingId === tx.id ? 'not-allowed' : 'pointer',
+                                                                            fontWeight: 700,
+                                                                            fontSize: '12px',
+                                                                            display: 'inline-flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center',
+                                                                            gap: '6px',
+                                                                        }}
+                                                                    >
+                                                                        <Ban size={14} />
+                                                                        {voidingId === tx.id ? 'Membatalkan...' : 'Batalkan Transaksi'}
+                                                                    </button>
+                                                                </div>
+                                                            ) : null}
                                                         </div>
                                                     </div>
                                                 </td>
